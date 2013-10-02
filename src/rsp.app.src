@@ -1,12 +1,13 @@
 {application, rsp,
  [
-  {description, ""},
+  {description, "rock-scissors-paper"},
   {vsn, "1"},
-  {registered, []},
+  {registered, [rsp_sup]},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  lager
                  ]},
-  {mod, { rsp_app, []}},
+  {mod, {rsp_app, []}},
   {env, []}
  ]}.

@@ -1,13 +1,15 @@
+%%% -------------------------------------------------------------------
+%%% Author  : Sungjin Park <jinni.park@gmail.com>
+%%%
+%%% Description : Rock-scissors-paper game application callback.
+%%%
+%%% Created : Sep 27, 2013
+%%% -------------------------------------------------------------------
 -module(rsp_app).
-
+-author("Sungjin Park <jinni.park@gmail.com>").
 -behaviour(application).
 
-%% Application callbacks
 -export([start/2, stop/1]).
-
-%% ===================================================================
-%% Application callbacks
-%% ===================================================================
 
 start(_StartType, _StartArgs) ->
     rsp_sup:start_link().
