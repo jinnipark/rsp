@@ -10,6 +10,10 @@
 
 -export([start/0, stop/0, state/0, settings/1]).
 
+-define(MNESIA_TIMEOUT, 10000).
+
+-include("rsp.hrl").
+
 -spec start() -> ok | {error, term()}.
 start() ->
 	% create application dependency store
@@ -17,6 +21,7 @@ start() ->
 	ensure_started(kernel),
 	ensure_started(stdlib),
 	ensure_started(lager),
+	ensure_started(mnesia),
 	Res = application:start(?MODULE),
 	% let the store persist
 	ets:setopts(?MODULE, [{heir, whereis(rsp_sup), ?MODULE}]),
@@ -74,14 +79,50 @@ ensure_stopped([[App, _] | T]) ->
 	poststop(App),
 	ensure_stopped(T).
 
+prestart(mnesia) ->
+	case list_to_atom(os:getenv("RSP_MASTER")) of
+		undefined ->
+			% schema must be created in standalone mode
+			mnesia:create_schema([node()]);
+		Master ->
+			% join a cluster and clear stale replica
+			pong = net_adm:ping(Master),
+			lists:foreach(fun(N) ->
+							  rpc:call(N, mnesia, del_table_copy, [schema, node()])
+						  end,
+						  nodes())
+	end;
 prestart(_) ->
 	ok.
 
+poststart(mnesia) ->
+	case list_to_atom(os:getenv("RSP_MASTER")) of
+		undefined ->
+			% create tables
+			mnesia:create_table(rsp_match_tb, [{attributes, record_info(fields, rsp_match_tb)},
+											   {disc_copies, [node()]}, {type, set},
+											   {index, []}]),
+			ok = mnesia:wait_for_tables([rsp_match_tb], ?MNESIA_TIMEOUT);
+		Master ->
+			% create fresh replicas
+			{ok, _} = rpc:call(Master, mnesia, change_config, [extra_db_nodes, [node()]]),
+			mnesia:change_table_copy_type(schema, node(), disc_copies),
+			{atomic, ok} = mnesia:add_table_copy(rsp_match_tb, node(), disc_copies)
+	end;
 poststart(_) ->
 	ok.
 
 prestop(_) ->
 	ok.
 
+poststop(mnesia) ->
+	% clear replica before leaving the cluster
+	lists:foreach(fun(N) ->
+                      case node() of
+                          N -> ok;
+					      _ -> rpc:call(N, mnesia, del_table_copy, [schema, node()])
+                      end
+				  end,
+				  nodes());
 poststop(_) ->
 	ok.
