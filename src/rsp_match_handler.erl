@@ -19,9 +19,16 @@ handle(Req, State) ->
 
 do_match({<<"POST">>, Req}, State) ->
     {ok, Params, Req1} = cowboy_req:body_qs(Req),
-    lager:debug("params ~p", [Params]),
-    {ok, Req2} = cowboy_req:reply(200, [], <<>>, Req1),
-    {ok, Req2, State};
+    {Match, Req2} = cowboy_req:binding(id, Req1),
+    lager:debug("match ~p, params ~p", [Match, Params]),
+    {Code, Msg} = rsp_match:play(Match, {proplists:get_value(<<"player">>, Params), proplists:get_value(<<"move">>, Params)}),
+    {ok, Req3} = cowboy_req:reply(case {Code, Msg} of
+                                      {ok, _} -> 200;
+                                      {retry, _} -> 202;
+                                      {error, timeout} -> 503;
+                                      {error, _} -> 400
+                                  end, [], io_lib:format("~p", [Msg]), Req2),
+    {ok, Req3, State};
 do_match({Method, Req}, State) ->
     lager:warning("method not allowed ~p", [Method]),
     {ok, Req1} = cowboy_req:reply(405, [], <<>>, Req),
