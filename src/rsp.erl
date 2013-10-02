@@ -22,6 +22,7 @@ start() ->
 	ensure_started(stdlib),
 	ensure_started(lager),
 	ensure_started(mnesia),
+    ensure_started(cowboy),
 	Res = application:start(?MODULE),
 	% let the store persist
 	ets:setopts(?MODULE, [{heir, whereis(rsp_sup), ?MODULE}]),

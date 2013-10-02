@@ -6,8 +6,8 @@
 APP=rsp
 node=$(APP)
 master=undefined
-port=80
-sport=443
+port=8000
+sport=undefined
 cookie=thisisaninsecurecookie_makeyourown
 privdir=priv
 datadir=$(privdir)/data
