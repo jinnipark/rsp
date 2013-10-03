@@ -25,7 +25,8 @@ stop(_State) ->
 start_listener() ->
     Dispatch = cowboy_router:compile([
         {'_', [ % host match
-            {"/match/:id", rsp_match_handler, []}
+            {"/match/:id", rsp_match_handler, []},
+            {"/event/:id", rsp_event_handler, []}
         ]}
     ]),
     Config = ?PROPS_TO_RECORD(rsp:settings(?MODULE), ?MODULE),

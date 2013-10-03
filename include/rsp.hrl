@@ -19,6 +19,7 @@
 
 -record(rsp_event_tb, {id='_',
                        name='_',
+                       ref='_',
                        start_date='_',
                        start_time='_',
                        end_date='_',

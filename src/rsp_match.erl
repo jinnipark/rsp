@@ -9,7 +9,7 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start_link/1, stop/1, play/2]).
+-export([start/1, stop/1, play/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
@@ -27,10 +27,10 @@
 %% Start a match
 %%   [{id, binary()}, {player1, binary()}, {player2, binary()}, {event, binary()}]
 %%
--spec start_link([{atom(), term()}]) -> {ok, pid()} | {error, term()}.
-start_link(Props) ->
+-spec start([{atom(), term()}]) -> {ok, pid()} | {error, term()}.
+start(Props) ->
 	State = ?PROPS_TO_RECORD(Props ++ rsp:settings(?MODULE), ?MODULE),
-	gen_server:start_link(?MODULE, State, []).
+	gen_server:start(?MODULE, State, []).
 
 %%
 %% Stop a match
