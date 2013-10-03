@@ -20,11 +20,12 @@
 				  id,
 				  player1,
 				  player2,
-				  result}).
+				  result,
+                  event}).
 
 %%
 %% Start a match
-%%   [{id, binary()}, {player1, binary()}, {player2, binary()}}]
+%%   [{id, binary()}, {player1, binary()}, {player2, binary()}, {event, binary()}]
 %%
 -spec start_link([{atom(), term()}]) -> {ok, pid()} | {error, term()}.
 start_link(Props) ->
@@ -33,7 +34,7 @@ start_link(Props) ->
 
 %%
 %% Stop a match
-%%   pid() | rsp_id()
+%%   pid() | binary()
 %%
 -spec stop(pid() | binary()) -> ok | {error, term()}.
 stop(Pid) when is_pid(Pid) ->
@@ -45,9 +46,11 @@ stop(_) ->
 
 %%
 %% Play a game - sync
-%%   pid() | rsp_id()
-%%   {rsp_id(), rock | scissors | paper}
+%%   pid() | binary()
+%%   {binary(), <<"rock">> | <<"scissors">> | <<"paper">>}
 %%
+-spec play(pid() | binary(), {binary(), binary()}) ->
+          {ok, win | loss | abandoned} | {retry, draw} | {error, term()}.
 play(_, {_, Move}) when (Move =/= <<"rock">>) and (Move =/= <<"scissors">>) and (Move =/= <<"paper">>) ->
     {error, illegal};
 play(Pid, {Player, Move}) when is_pid(Pid) ->
@@ -78,7 +81,8 @@ init(State=#?MODULE{timeout=To, id=Id, player1=P1, player2=P2}) ->
 			mnesia:write(#rsp_match_tb{id=Id, ref=self(),
 									   player1_id=P1, player2_id=P2,
 									   player1_seq=[], player2_seq=[],
-                                       start_date=D, start_time=T})
+                                       start_date=D, start_time=T,
+                                       event_id=State#?MODULE.event})
 		end,
 	case catch mnesia:transaction(F) of
 		{atomic, ok} ->

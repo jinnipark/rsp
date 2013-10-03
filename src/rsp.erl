@@ -103,12 +103,16 @@ poststart(mnesia) ->
 			mnesia:create_table(rsp_match_tb, [{attributes, record_info(fields, rsp_match_tb)},
 											   {disc_copies, [node()]}, {type, set},
 											   {index, []}]),
-			ok = mnesia:wait_for_tables([rsp_match_tb], ?MNESIA_TIMEOUT);
+            mnesia:create_table(rsp_event_tb, [{attributes, record_info(fields, rsp_event_tb)},
+                                               {disc_copies, [node()]}, {type, set},
+                                               {index, []}]),
+			ok = mnesia:wait_for_tables([rsp_match_tb, rsp_event_tb], ?MNESIA_TIMEOUT);
 		Master ->
 			% create fresh replicas
 			{ok, _} = rpc:call(Master, mnesia, change_config, [extra_db_nodes, [node()]]),
 			mnesia:change_table_copy_type(schema, node(), disc_copies),
-			{atomic, ok} = mnesia:add_table_copy(rsp_match_tb, node(), disc_copies)
+			{atomic, ok} = mnesia:add_table_copy(rsp_match_tb, node(), disc_copies),
+            {atomic, ok} = mnesia:add_table_copy(rsp_event_tb, node(), disc_copies)
 	end;
 poststart(_) ->
 	ok.

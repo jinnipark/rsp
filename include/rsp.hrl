@@ -14,5 +14,13 @@
 					   start_date='_',
 					   start_time='_',
 					   end_date='_',
+                       end_time='_',
+                       event_id='_'}).
+
+-record(rsp_event_tb, {id='_',
+                       name='_',
+                       start_date='_',
+                       start_time='_',
+                       end_date='_',
                        end_time='_'}).
 
