@@ -22,11 +22,12 @@ do_event({<<"POST">>, Req}, State) ->
     {Event, Req2} = cowboy_req:binding(id, Req1),
     lager:debug("event ~p, params ~p", [Event, Params]),
     {Code, Msg} = rsp_event:join(Event, proplists:get_value(<<"player">>, Params)),
-    {ok, Req3} = cowboy_req:reply(case Code of
-                                      ok -> 200;
+    {ok, Req3} = cowboy_req:reply(case {Code, Msg} of
+                                      {ok, _} -> 200;
+                                      {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 400
-                                  end, [], io_lib:format("~s", [Msg]), Req2),
+                                  end, [], io_lib:format("~p~n", [Msg]), Req2),
     {ok, Req3, State};
 do_event({Method, Req}, State) ->
     lager:warning("method not allowed ~p", [Method]),

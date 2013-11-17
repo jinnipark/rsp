@@ -209,7 +209,12 @@ invoke(F, Args, Id) ->
 		end,
 	case mnesia:transaction(G) of
 		{atomic, [Match]} ->
-			erlang:apply(F, [Match#rsp_match_tb.ref | Args]);
+			case Match#rsp_match_tb.ref of
+				Pid when is_pid(Pid) ->
+					erlang:apply(F, [Match#rsp_match_tb.ref | Args]);
+				_ ->
+					{error, match_closed}
+			end;
 		{atomic, []} ->
 			{error, not_found};
 		{aborted, Reason} ->

@@ -25,9 +25,12 @@ do_match({<<"POST">>, Req}, State) ->
     {ok, Req3} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
                                       {retry, _} -> 202;
+                                      {error, illegal} -> 400;
+                                      {error, match_closed} -> 400;
+                                      {error, not_found} -> 404;
                                       {error, timeout} -> 503;
-                                      {error, _} -> 400
-                                  end, [], io_lib:format("~p", [Msg]), Req2),
+                                      {error, _} -> 500
+                                  end, [], io_lib:format("~p~n", [Msg]), Req2),
     {ok, Req3, State};
 do_match({Method, Req}, State) ->
     lager:warning("method not allowed ~p", [Method]),
