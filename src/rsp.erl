@@ -13,6 +13,7 @@
 -define(MNESIA_TIMEOUT, 10000).
 
 -include("rsp.hrl").
+-include_lib("stdlib/include/qlc.hrl").
 
 -spec start() -> ok | {error, term()}.
 start() ->
@@ -106,7 +107,19 @@ poststart(mnesia) ->
             mnesia:create_table(rsp_event_tb, [{attributes, record_info(fields, rsp_event_tb)},
                                                {disc_copies, [node()]}, {type, set},
                                                {index, []}]),
-			ok = mnesia:wait_for_tables([rsp_match_tb, rsp_event_tb], ?MNESIA_TIMEOUT);
+			ok = mnesia:wait_for_tables([rsp_match_tb, rsp_event_tb], ?MNESIA_TIMEOUT),
+			Q = qlc:q([Event || Event <- mnesia:table(rsp_event_tb),
+								erlang:is_pid(Event#rsp_event_tb.ref)]),
+			T = fun() ->
+					Events = qlc:e(Q),
+					lists:foreach(fun(Event) ->
+									  rsp_event:start([{id, Event#rsp_event_tb.id},
+									  				   {name, Event#rsp_event_tb.name},
+									  				   {start_date, Event#rsp_event_tb.start_date},
+									  				   {start_time, Event#rsp_event_tb.start_time}])
+								  end, Events)
+				end,
+			ok = mnesia:async_dirty(T);
 		Master ->
 			% create fresh replicas
 			{ok, _} = rpc:call(Master, mnesia, change_config, [extra_db_nodes, [node()]]),

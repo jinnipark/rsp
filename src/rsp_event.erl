@@ -19,7 +19,8 @@
                   name,
                   timeout=10000,
                   pool=[],
-                  uuid}).
+                  start_date,
+                  start_time}).
 
 %%
 %% Start an event
@@ -68,16 +69,21 @@ join(_, _) ->
 %%
 init(State=#?MODULE{id=Id, name=Name}) ->
     lager:debug("init ~p", [Id]),
-    Now = os:timestamp(),
     F = fun() ->
-            {D, T} = calendar:now_to_universal_time(Now),
+            {D, T} = case State#?MODULE.start_date of
+                         undefined ->
+                             Now = os:timestamp(),
+                             calendar:now_to_universal_time(Now);
+                         Date ->
+                             {Date, State#?MODULE.start_time}
+                     end,
             mnesia:write(#rsp_event_tb{id=Id, name=Name, ref=self(),
                                        start_date=D, start_time=T})
         end,
     case catch mnesia:transaction(F) of
         {atomic, ok} ->
             erlang:process_flag(trap_exit, true),
-            {ok, State#?MODULE{uuid=uuid:new(self(), os)}};
+            {ok, State};
         Error ->
             {stop, Error, State}
     end.
