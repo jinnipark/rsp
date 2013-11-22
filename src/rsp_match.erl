@@ -9,7 +9,7 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start/1, stop/1, play/2]).
+-export([start/1, stop/1, play/2, get/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
@@ -69,6 +69,17 @@ play(Id, {Player, Move}) when is_binary(Id) ->
 	invoke(fun play/2, [{Player, Move}], Id);
 play(_, _) ->
 	{error, not_supported}.
+
+get(Id) ->
+	F = fun() ->
+			mnesia:read(rsp_match_tb, Id)
+		end,
+	case catch mnesia:transaction(F) of
+		{atomic, [Match]} ->
+			{ok, Match};
+		Error ->
+			{error, Error}
+	end.
 
 %%
 %% gen_server callbacks

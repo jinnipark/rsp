@@ -27,7 +27,7 @@ do_event({<<"POST">>, Req}, State) ->
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 400
-                                  end, [], io_lib:format("~p~n", [Msg]), Req2),
+                                  end, [], io_lib:format("~s~n", [Msg]), Req2),
     {ok, Req3, State};
 do_event({Method, Req}, State) ->
     lager:warning("method not allowed ~p", [Method]),
