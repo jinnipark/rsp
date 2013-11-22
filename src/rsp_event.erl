@@ -164,7 +164,22 @@ invoke(F, Args, Id) ->
         end,
     case mnesia:transaction(G) of
         {atomic, [Event]} ->
-            erlang:apply(F, [Event#rsp_event_tb.ref | Args]);
+            case Event#rsp_event_tb.ref of
+                Ref when erlang:is_pid(Ref) ->
+                    Pid = case catch erlang:is_process_alive(Ref) of
+                              true ->
+                                  Ref;
+                              _ -> % Dead event, restart in a lazy manner.
+                                  {ok, NewPid} = ?MODULE:start([{id, Event#rsp_event_tb.id},
+                                                                {name, Event#rsp_event_tb.name},
+                                                                {start_date, Event#rsp_event_tb.start_date},
+                                                                {start_time, Event#rsp_event_tb.start_time}]),
+                                  NewPid
+                          end,
+                          erlang:apply(F, [Pid | Args]);
+                _ ->
+                    {error, closed}
+            end;
         {atomic, []} ->
             {error, not_found};
         {aborted, Reason} ->

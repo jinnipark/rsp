@@ -221,10 +221,20 @@ invoke(F, Args, Id) ->
 	case mnesia:transaction(G) of
 		{atomic, [Match]} ->
 			case Match#rsp_match_tb.ref of
-				Pid when is_pid(Pid) ->
-					erlang:apply(F, [Match#rsp_match_tb.ref | Args]);
+				Pid when erlang:is_pid(Pid) ->
+					case catch erlang:is_process_alive(Pid) of
+						true ->
+							erlang:apply(F, [Pid | Args]);
+						_ -> % Dead match, abandon.
+							{atomic, ok} = mnesia:transaction(fun() ->
+																  mnesia:write(Match#rsp_match_tb{ref=abandoned})
+															  end),
+							{error, abandoned}
+					end;
+				abandoned ->
+					{error, abandoned};
 				_ ->
-					{error, match_closed}
+					{error, closed}
 			end;
 		{atomic, []} ->
 			{error, not_found};
