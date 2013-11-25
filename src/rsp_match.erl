@@ -161,7 +161,7 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
             end;
         _ ->
             % something illegal
-            {reply, {error, busy}, State, timeout(State)}
+            {reply, {error, forbidden}, State, timeout(State)}
     end;
 handle_call(Req, _From, State) ->
 	lager:warning("unknown call ~p", [Req]),

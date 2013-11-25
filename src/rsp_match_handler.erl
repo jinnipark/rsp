@@ -29,6 +29,7 @@ do_match({<<"POST">>, Req}, State) ->
                                       {retry, _} -> 202;
                                       {error, illegal} -> 400;
                                       {error, match_closed} -> 400;
+                                      {error, forbidden} -> 403;
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 500

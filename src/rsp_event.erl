@@ -9,7 +9,7 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start/1, stop/1, join/2]).
+-export([start/1, stop/1, join/2, get/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
@@ -42,6 +42,25 @@ stop(Id) when erlang:is_binary(Id) ->
     invoke(fun stop/1, [], Id);
 stop(_) ->
     {error, not_supported}.
+
+-spec get(all | binary()) -> {ok, list(#rsp_event_tb{}) | #rsp_event_tb{}} | {error, term()}.
+get(all) ->
+    F = fun() ->
+            mnesia:match_object(#rsp_event_tb{})
+        end,
+    case mnesia:transaction(F) of
+        {atomic, Events} -> {ok, Events};
+        Error -> {error, Error}
+    end;
+get(Id) ->
+    F = fun() ->
+            mnesia:match_object(#rsp_event_tb{id=Id})
+        end,
+    case mnesia:transaction(F) of
+        {atomic, [Event]} -> {ok, Event};
+        {atomic, []} -> {error, not_found};
+        Error -> {error, Error}
+    end.
 
 %%
 %% Join an event
