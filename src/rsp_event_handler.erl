@@ -29,7 +29,14 @@ do_event({<<"POST">>, Req}, State) ->
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 400
-                                  end, [], io_lib:format("~s~n", [Msg]), Req2),
+                                  end,
+                                  [{<<"content-type">>, <<"application/json">>}],
+                                  case catch jsx:encode(Msg) of
+                                      {'EXIT', _} ->
+                                          jsx:encode(erlang:list_to_binary(io_lib:format("~w", [Msg])));
+                                      Json ->
+                                          Json
+                                  end, Req2),
     {ok, Req3, State};
 do_event({<<"GET">>, Req}, State) ->
     {Val, Req1} = cowboy_req:binding(id, Req),
@@ -44,9 +51,10 @@ do_event({<<"GET">>, Req}, State) ->
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 500
-                                  end, [{<<"content-type">>, <<"application/json">>}],
+                                  end,
+                                  [{<<"content-type">>, <<"application/json">>}],
                                   case Code of
-                                      ok ->
+                                      200 ->
                                           jsx:encode(case Msg of
                                                          Events when erlang:is_list(Events) ->
                                                              lists:map(fun(Event) ->
@@ -72,7 +80,12 @@ do_event({<<"GET">>, Req}, State) ->
                                                                        end}]
                                                      end);
                                       _ ->
-                                          io_lib:format("~p~n", [Msg])
+                                          case catch jsx:encode(Msg) of
+                                              {'EXIT', _} ->
+                                                  jsx:encode(erlang:list_to_binary(io_lib:format("~w", [Msg])));
+                                              Json ->
+                                                  Json
+                                          end
                                   end, Req1),
     {ok, Req2, State};
 do_event({Method, Req}, State) ->

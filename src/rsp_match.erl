@@ -9,11 +9,13 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start/1, stop/1, play/2, get/1]).
+-export([start/1, stop/1, play/2, get/1, get_opponent/2, hint/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
 -include("rsp.hrl").
+
+-define (MAX_RECORD, 2).
 
 -record(?MODULE, {timeout=60000,
 				  timestamp,
@@ -79,6 +81,58 @@ get(Id) ->
 			{ok, Match};
 		Error ->
 			{error, Error}
+	end.
+
+get_opponent(Pid, Player) when is_pid(Pid) ->
+    gen_server:call(Pid, {opponent, Player});
+get_opponent(Id, Player) when is_binary(Id) ->
+	invoke(fun get_opponent/2, [Player], Id);
+get_opponent(_, _) ->
+	{error, not_supported}.
+
+get_wins(Player) ->
+	F = fun() ->
+			W2 = case mnesia:select(rsp_match_tb,
+									[{#rsp_match_tb{ref='$1', player2_id='$2', player2_seq='$3'},
+									  [{'==', '$1', player2}, {'==', '$2', Player}],
+									  ['$3']}],
+									?MAX_RECORD, read) of
+					 {W1, _} ->
+					 	 lists:map(fun(E) ->
+					 	 	 		   lists:map(fun(E1) ->
+					 	 	 		   				 erlang:list_to_binary(io_lib:format("~w", [E1]))
+					 					  		 end, E)
+					 	 	 	   end, W1);
+					 _ -> []
+				 end,
+			W4 = case mnesia:select(rsp_match_tb,
+									[{#rsp_match_tb{ref='$1', player1_id='$2', player1_seq='$3'},
+									  [{'==', '$1', player1}, {'==', '$2', Player}],
+									  ['$3']}],
+									?MAX_RECORD, read) of
+					 {W3, _} ->
+					 	 lists:map(fun(E) ->
+					 	 	 		   lists:map(fun(E1) ->
+					 	 	 		   				 erlang:list_to_binary(io_lib:format("~w", [E1]))
+					 					  		 end, E)
+					 	 	 	   end, W3);
+					 _ -> []
+				 end,
+			W2 ++ W4
+		end,
+	case catch mnesia:transaction(F) of
+		{atomic, W} ->
+			{ok, W};
+		Error ->
+			{error, Error}
+	end.
+
+hint(Id, Player) when is_binary(Id) ->
+	case get_opponent(Id, Player) of
+		{ok, Opponent} ->
+			get_wins(Opponent);
+		Error ->
+			Error
 	end.
 
 %%
@@ -163,6 +217,12 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
             % something illegal
             {reply, {error, forbidden}, State, timeout(State)}
     end;
+handle_call({opponent, Player}, _From, State=#?MODULE{player1={Player, _, _}, player2={Opponent, _, _}}) ->
+	{reply, {ok, Opponent}, State, timeout(State)};
+handle_call({opponent, Player}, _From, State=#?MODULE{player1={Opponent, _, _}, player2={Player, _, _}}) ->
+	{reply, {ok, Opponent}, State, timeout(State)};
+handle_call({opponent, _Player}, _From, State) ->
+	{reply, {error, forbidden}, State, timeout(State)};
 handle_call(Req, _From, State) ->
 	lager:warning("unknown call ~p", [Req]),
 	{noreply, State, timeout(State)}.

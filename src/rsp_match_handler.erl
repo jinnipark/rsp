@@ -28,25 +28,40 @@ do_match({<<"POST">>, Req}, State) ->
                                       {ok, _} -> 200;
                                       {retry, _} -> 202;
                                       {error, illegal} -> 400;
-                                      {error, match_closed} -> 400;
+                                      {error, closed} -> 400;
                                       {error, forbidden} -> 403;
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 500
-                                  end, [], io_lib:format("~p~n", [Msg]), Req2),
+                                  end,
+                                  [{<<"content-type">>, <<"application/json">>}],
+                                  case catch jsx:encode(Msg) of
+                                      {'EXIT', _} ->
+                                          jsx:encode(erlang:list_to_binary(io_lib:format("~w", [Msg])));
+                                      Json ->
+                                          Json
+                                  end, Req2),
     {ok, Req3, State};
 do_match({<<"GET">>, Req}, State) ->
     {Id, Req1} = cowboy_req:binding(id, Req),
-    lager:debug("get match ~p", [Id]),
-    {Code, Msg} = rsp_match:get(Id),
-    {ok, Req2} = cowboy_req:reply(case {Code, Msg} of
+    {Rsc, Req2} = cowboy_req:binding(rsc, Req1),
+    {Param, Req3} = cowboy_req:qs_val(<<"player">>, Req2),
+    lager:debug("get match ~p, rsc ~p, param ~p", [Id, Rsc, Param]),
+    {Code, Msg} = case Rsc of
+                      undefined -> rsp_match:get(Id);
+                      <<"hint">> -> rsp_match:hint(Id, Param);
+                      _ -> {error, bad_resource}
+                  end,
+    {ok, Req4} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
+                                      {error, bad_resource} -> 400;
                                       {error, not_found} -> 404;
                                       {error, timeout} -> 503;
                                       {error, _} -> 500
-                                  end, [{<<"content-type">>, <<"application/json">>}],
-                                  case Code of
-                                      ok ->
+                                  end,
+                                  [{<<"content-type">>, <<"application/json">>}],
+                                  case Msg of
+                                      _=#rsp_match_tb{} ->
                                           Match = [{player1, Msg#rsp_match_tb.player1_id},
                                                    {player2, Msg#rsp_match_tb.player2_id},
                                                    {status, case Msg#rsp_match_tb.ref of
@@ -58,9 +73,14 @@ do_match({<<"GET">>, Req}, State) ->
                                                    {event, Msg#rsp_match_tb.event_id}],
                                           jsx:encode(Match);
                                       _ ->
-                                          io_lib:format("~p~n", [Msg])
-                                  end, Req1),
-    {ok, Req2, State};
+                                          case catch jsx:encode(Msg) of
+                                              {'EXIT', _} ->
+                                                  jsx:encode(erlang:list_to_binary(io_lib:format("~w", [Msg])));
+                                              Json ->
+                                                  Json
+                                          end
+                                  end, Req3),
+    {ok, Req4, State};
 do_match({Method, Req}, State) ->
     lager:warning("method not allowed ~p", [Method]),
     {ok, Req1} = cowboy_req:reply(405, [], <<>>, Req),
