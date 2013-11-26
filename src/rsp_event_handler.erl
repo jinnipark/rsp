@@ -54,7 +54,7 @@ do_event({<<"GET">>, Req}, State) ->
                                   end,
                                   [{<<"content-type">>, <<"application/json">>}],
                                   case Code of
-                                      200 ->
+                                      ok ->
                                           jsx:encode(case Msg of
                                                          Events when erlang:is_list(Events) ->
                                                              lists:map(fun(Event) ->

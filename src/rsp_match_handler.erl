@@ -62,7 +62,8 @@ do_match({<<"GET">>, Req}, State) ->
                                   [{<<"content-type">>, <<"application/json">>}],
                                   case Msg of
                                       _=#rsp_match_tb{} ->
-                                          Match = [{player1, Msg#rsp_match_tb.player1_id},
+                                          Match = [{id, Msg#rsp_match_tb.id},
+                                                   {player1, Msg#rsp_match_tb.player1_id},
                                                    {player2, Msg#rsp_match_tb.player2_id},
                                                    {status, case Msg#rsp_match_tb.ref of
                                                                 Pid when erlang:is_pid(Pid) -> <<"open">>;
