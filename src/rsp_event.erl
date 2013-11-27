@@ -9,7 +9,7 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start/1, stop/1, join/2, get/1]).
+-export([start/1, start_link/1, stop/1, join/2, get/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
@@ -23,13 +23,23 @@
                   start_time}).
 
 %%
-%% Start an event
+%% Start an event under the top-level-supervisor
 %%   [{id, binary()}, {name, binary()}]
 %%
 -spec start([{atom(), binary()}]) -> {ok, pid()} | {error, term()}.
 start(Props) ->
+    Id = proplists:get_value(id, Props),
+    EventSpec = {Id, {?MODULE, start_link, [Props]}, transient, 5000, worker, dynamic},
+    supervisor:start_child(rsp_sup, EventSpec).
+
+%%
+%% Start an event
+%%   [{id, binary()}, {name, binary()}]
+%%
+-spec start_link([{atom(), binary()}]) -> {ok, pid()} | {error, term()}.
+start_link(Props) ->
     State = ?PROPS_TO_RECORD(Props ++ rsp:settings(?MODULE), ?MODULE),
-    gen_server:start(?MODULE, State, []).
+    gen_server:start_link(?MODULE, State, []).
 
 %%
 %% Stop an event
