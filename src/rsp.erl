@@ -103,7 +103,7 @@ poststart(mnesia) ->
 			% create tables
 			mnesia:create_table(rsp_match_tb, [{attributes, record_info(fields, rsp_match_tb)},
 											   {disc_copies, [node()]}, {type, ordered_set},
-											   {index, [start_date, start_time]}]),
+											   {index, [id]}]),
             mnesia:create_table(rsp_event_tb, [{attributes, record_info(fields, rsp_event_tb)},
                                                {disc_copies, [node()]}, {type, set},
                                                {index, []}]),

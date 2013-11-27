@@ -19,8 +19,7 @@
                   name,
                   timeout=10000,
                   pool=[],
-                  start_date,
-                  start_time}).
+                  from}).
 
 %%
 %% Start an event under the top-level-supervisor
@@ -99,23 +98,18 @@ join(_, _) ->
 init(State=#?MODULE{id=Id, name=Name}) ->
     lager:debug("init ~p", [Id]),
     F = fun() ->
-            {D, T} = case State#?MODULE.start_date of
-                         undefined ->
-                             Now = os:timestamp(),
-                             calendar:now_to_universal_time(Now);
-                         Date ->
-                             {Date, State#?MODULE.start_time}
-                     end,
-            mnesia:write(#rsp_event_tb{id=Id, name=Name, ref=self(),
-                                       start_date=D, start_time=T})
+            From = case State#?MODULE.from of
+                       undefined ->
+                           {A, B, C} = os:timestamp(),
+                           {-A, -B, -C};
+                       T ->
+                           T
+                   end,
+            mnesia:write(#rsp_event_tb{id=Id, name=Name, ref=self(), from=From})
         end,
-    case catch mnesia:transaction(F) of
-        {atomic, ok} ->
-            erlang:process_flag(trap_exit, true),
-            {ok, State};
-        Error ->
-            {stop, Error, State}
-    end.
+    {atomic, ok} = mnesia:transaction(F),
+    erlang:process_flag(trap_exit, true),
+    {ok, State}.
 
 handle_call({join, Player}, {Pid, _}, State=#?MODULE{id=Id, pool=Pool, timeout=T}) ->
     case lists:keyfind(Player, 1, Pool) of
@@ -163,13 +157,11 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 terminate(Reason, #?MODULE{id=Id}) ->
-    Now = os:timestamp(),
     F = fun() ->
             case mnesia:wread({rsp_event_tb, Id}) of
                 [Event] ->
-                    {D, T} = calendar:now_to_universal_time(Now),
-                    mnesia:write(Event#rsp_event_tb{ref=undefined,
-                                                    end_date=D, end_time=T});
+                    {A, B, C} = os:timestamp(),
+                    mnesia:write(Event#rsp_event_tb{ref=undefined, to={-A, -B, -C}});
                 _ ->
                     db_corrupt
             end
@@ -201,8 +193,7 @@ invoke(F, Args, Id) ->
                               _ -> % Dead event, restart in a lazy manner.
                                   {ok, NewPid} = ?MODULE:start([{id, Event#rsp_event_tb.id},
                                                                 {name, Event#rsp_event_tb.name},
-                                                                {start_date, Event#rsp_event_tb.start_date},
-                                                                {start_time, Event#rsp_event_tb.start_time}]),
+                                                                {from, Event#rsp_event_tb.from}]),
                                   NewPid
                           end,
                           erlang:apply(F, [Pid | Args]);

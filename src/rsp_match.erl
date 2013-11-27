@@ -74,7 +74,7 @@ play(_, _) ->
 
 get(Id) ->
 	F = fun() ->
-			mnesia:read(rsp_match_tb, Id)
+			mnesia:match_object(#rsp_match_tb{id=Id})
 		end,
 	case catch mnesia:transaction(F) of
 		{atomic, [Match]} ->
@@ -90,47 +90,46 @@ get_opponent(Id, Player) when is_binary(Id) ->
 get_opponent(_, _) ->
 	{error, not_supported}.
 
-get_wins(Player) ->
+get_records(Player) ->
 	F = fun() ->
-			W2 = case mnesia:select(rsp_match_tb,
-									[{#rsp_match_tb{ref='$1', player2_id='$2', player2_seq='$3'},
-									  [{'==', '$1', player2}, {'==', '$2', Player}],
-									  ['$3']}],
-									?MAX_RECORD, read) of
-					 {W1, _} ->
-					 	 lists:map(fun(E) ->
-					 	 	 		   lists:map(fun(E1) ->
-					 	 	 		   				 erlang:list_to_binary(io_lib:format("~w", [E1]))
-					 					  		 end, E)
-					 	 	 	   end, W1);
-					 _ -> []
-				 end,
-			W4 = case mnesia:select(rsp_match_tb,
-									[{#rsp_match_tb{ref='$1', player1_id='$2', player1_seq='$3'},
-									  [{'==', '$1', player1}, {'==', '$2', Player}],
-									  ['$3']}],
-									?MAX_RECORD, read) of
-					 {W3, _} ->
-					 	 lists:map(fun(E) ->
-					 	 	 		   lists:map(fun(E1) ->
-					 	 	 		   				 erlang:list_to_binary(io_lib:format("~w", [E1]))
-					 					  		 end, E)
-					 	 	 	   end, W3);
-					 _ -> []
-				 end,
-			W2 ++ W4
+			mnesia:select(rsp_match_tb,
+						  [{#rsp_match_tb{ref='$1', % match head
+						   				  player1_id='$2', player1_seq='$3',
+								   		  player2_id='$4', player2_seq='$5'},
+						   [{'and', {'or', {'==', '$2', Player}, {'==', '$4', Player}}, % guard
+						   			{'or', {'==', '$1', player1}, {'==', '$1', player2}}}],
+						   ['$$']}], % result
+						  ?MAX_RECORD, read)
 		end,
 	case catch mnesia:transaction(F) of
-		{atomic, W} ->
-			{ok, W};
+		{atomic, {Records, _}} ->
+			{ok, lists:map(fun([W, P1, M1, P2, M2]) ->
+								  case {W, P1, P2} of
+								  	  {player1, Player, _} ->
+								  		  [{result, <<"win">>}, {moves, to_binary(M1)}];
+								  	  {player1, _, Player} ->
+								  	  	  [{result, <<"loss">>}, {moves, to_binary(M2)}];
+								  	  {player2, Player, _} ->
+								  		  [{result, <<"loss">>}, {moves, to_binary(M1)}];
+								  	  {player2, _, Player} ->
+								  	  	  [{result, <<"win">>}, {moves, to_binary(M2)}];
+								  	  _ ->
+								  	  	  []
+								  end
+						   end, Records)};
+		{atomic, '$end_of_table'} ->
+			{ok, []};
 		Error ->
 			{error, Error}
 	end.
 
+to_binary(Moves) ->
+	lists:map(fun(Atom) -> erlang:list_to_binary(io_lib:format("~w", [Atom])) end, Moves).
+
 hint(Id, Player) when is_binary(Id) ->
 	case get_opponent(Id, Player) of
 		{ok, Opponent} ->
-			get_wins(Opponent);
+			get_records(Opponent);
 		Error ->
 			Error
 	end.
@@ -140,18 +139,17 @@ hint(Id, Player) when is_binary(Id) ->
 %%
 init(State=#?MODULE{timeout=To, id=Id, player1=P1, player2=P2}) ->
 	lager:debug("init ~p for ~p vs ~p", [Id, P1, P2]),
-	Now = os:timestamp(),
+	{A, B, C} = os:timestamp(),
 	F = fun() ->
-			{D, T} = calendar:now_to_universal_time(Now), 
-			mnesia:write(#rsp_match_tb{id=Id, ref=self(),
+			mnesia:write(#rsp_match_tb{timestamp={-A, -B, -C},
+									   id=Id, ref=self(),
 									   player1_id=P1, player2_id=P2,
 									   player1_seq=[], player2_seq=[],
-                                       start_date=D, start_time=T,
                                        event_id=State#?MODULE.event})
 		end,
 	case catch mnesia:transaction(F) of
 		{atomic, ok} ->
-			{ok, State#?MODULE{timestamp=Now, player1={P1, [], undefined}, player2={P2, [], undefined}}, To};
+			{ok, State#?MODULE{timestamp={A, B, C}, player1={P1, [], undefined}, player2={P2, [], undefined}}, To};
 		Error ->
 			{stop, Error, State}
 	end.
@@ -249,14 +247,11 @@ handle_info(Info, State) ->
 	{noreply, State, timeout(State)}.
 
 terminate(Reason, State=#?MODULE{id=Id, player1={_,L1,_}, player2={_,L2,_}}) ->
-	Now = os:timestamp(),
 	F = fun() ->
-			case mnesia:wread({rsp_match_tb,Id}) of
+			case mnesia:match_object(#rsp_match_tb{id=Id}) of
 				[Match] ->
-					{D, T} = calendar:now_to_universal_time(Now),
 					mnesia:write(Match#rsp_match_tb{ref=State#?MODULE.result,
-													player1_seq=L1, player2_seq=L2,
-													end_date=D, end_time=T});
+													player1_seq=L1, player2_seq=L2});
 				_ ->
 					db_corrupt
 			end
