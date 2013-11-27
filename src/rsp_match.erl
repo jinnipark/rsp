@@ -16,6 +16,7 @@
 -include("rsp.hrl").
 
 -define (MAX_RECORD, 2).
+-define (MAX_MOVES, 10).
 
 -record(?MODULE, {timeout=60000,
 				  timestamp,
@@ -77,10 +78,9 @@ get(Id) ->
 			mnesia:match_object(#rsp_match_tb{id=Id})
 		end,
 	case catch mnesia:transaction(F) of
-		{atomic, [Match]} ->
-			{ok, Match};
-		Error ->
-			{error, Error}
+		{atomic, [Match]} -> {ok, Match};
+		{atomic, []} -> {error, not_found};
+		Error -> {error, Error}
 	end.
 
 get_opponent(Pid, Player) when is_pid(Pid) ->
@@ -97,7 +97,7 @@ get_records(Player) ->
 						   				  player1_id='$2', player1_seq='$3',
 								   		  player2_id='$4', player2_seq='$5'},
 						   [{'and', {'or', {'==', '$2', Player}, {'==', '$4', Player}}, % guard
-						   			{'or', {'==', '$1', player1}, {'==', '$1', player2}}}],
+						   			{'or', {'==', '$1', player1}, {'==', '$1', player2}, {'==', '$1', draw}}}],
 						   ['$$']}], % result
 						  ?MAX_RECORD, read)
 		end,
@@ -113,6 +113,10 @@ get_records(Player) ->
 								  		  [{result, <<"loss">>}, {moves, to_binary(M1)}];
 								  	  {player2, _, Player} ->
 								  	  	  [{result, <<"win">>}, {moves, to_binary(M2)}];
+								  	  {draw, Player, _} ->
+								  	  	  [{result, <<"draw">>}, {moves, to_binary(M1)}];
+								  	  {draw, _, Player} ->
+								  	  	  [{result, <<"draw">>}, {moves, to_binary(M2)}];
 								  	  _ ->
 								  	  	  []
 								  end
@@ -141,7 +145,7 @@ init(State=#?MODULE{timeout=To, id=Id, player1=P1, player2=P2}) ->
 	lager:debug("init ~p for ~p vs ~p", [Id, P1, P2]),
 	{A, B, C} = os:timestamp(),
 	F = fun() ->
-			mnesia:write(#rsp_match_tb{timestamp={-A, -B, -C},
+			mnesia:write(#rsp_match_tb{timestamp={-A, -B, -C}, % for LIFO
 									   id=Id, ref=self(),
 									   player1_id=P1, player2_id=P2,
 									   player1_seq=[], player2_seq=[],
@@ -173,8 +177,14 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
                             {stop, normal, {ok, win}, State#?MODULE{result=player1, player1={Player, L, undefined}, player2=P2}};
                         draw ->
                             lager:debug("draw"),
-                            Pid2 ! {self(), {retry, draw}},
-                            {reply, {retry, draw}, State#?MODULE{timestamp=Now, player1={Player, L, undefined}, player2=P2}, To};
+                            case erlang:length(L) of
+                            	Len when Len >= ?MAX_MOVES ->
+        		                    Pid2 ! {self(), {ok, draw}},
+                                    {stop, normal, {ok, draw}, State#?MODULE{result=draw, player1={Player, L, undefined}, player2=P2}};
+                            	_ ->
+		                            Pid2 ! {self(), {retry, draw}},
+                            		{reply, {retry, draw}, State#?MODULE{timestamp=Now, player1={Player, L, undefined}, player2=P2}, To}
+                            end;
                         loss ->
                             lager:debug("player1 loss"),
                             Pid2 ! {self(), {ok, win}},
@@ -199,9 +209,14 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
                             Pid1 ! {self(), {ok, loss}},
                             {stop, normal, {ok, win}, State#?MODULE{result=player2, player1=P1, player2={Player, L, undefined}}};
                         draw ->
-                            lager:debug("draw"),
-                            Pid1 ! {self(), {retry, draw}},
-                            {reply, {retry, draw}, State#?MODULE{timestamp=Now, player1=P1, player2={Player, L, undefined}}, To};
+                            case erlang:length(L) of
+                            	Len when Len >= ?MAX_MOVES ->
+        		                    Pid1 ! {self(), {ok, draw}},
+                                    {stop, normal, {ok, draw}, State#?MODULE{result=draw, player1=P1, player2={Player, L, undefined}}};
+                            	_ ->
+		                            Pid1 ! {self(), {retry, draw}},
+                            		{reply, {retry, draw}, State#?MODULE{timestamp=Now, player1=P1, player2={Player, L, undefined}}, To}
+                            end;
                         loss ->
                             lager:debug("player2 loss"),
                             Pid1 ! {self(), {ok, win}},
