@@ -12,8 +12,7 @@
 
 -include("rsp.hrl").
 
-init(Transport, Req, []) ->
-    lager:debug("init ~p", [Transport]),
+init(_Transport, Req, []) ->
     {ok, Req, undefined}.
 
 handle(Req, State) ->
@@ -21,9 +20,31 @@ handle(Req, State) ->
 
 do_match({<<"POST">>, Req}, State) ->
     {ok, Params, Req1} = cowboy_req:body_qs(Req),
+    Player = proplists:get_value(<<"player">>, Params),
+    Move = proplists:get_value(<<"move">>, Params),
     {Match, Req2} = cowboy_req:binding(id, Req1),
-    lager:debug("join match ~p, params ~p", [Match, Params]),
-    {Code, Msg} = rsp_match:play(Match, {proplists:get_value(<<"player">>, Params), proplists:get_value(<<"move">>, Params)}),
+    lager:debug("player ~p playing match ~p with move ~p", [Player, Match, Move]),
+    {Code, Msg} = case rsp_match:play(Match, {Player, Move}) of
+                      {wait, Pid, T} ->
+                        Transport = cowboy_req:get(transport, Req2),
+                        Socket = cowboy_req:get(socket, Req2),
+                        Transport:setopts(Socket, [{active, once}]),
+                        receive
+                          {tcp_closed, Socket} ->
+                            lager:debug("player ~p disconnected", [Player]),
+                            {error, retry};
+                          {ssl_closed, Socket} ->
+                            lager:debug("player ~p disconnected", [Player]),
+                            {error, retry};
+                          {Pid, Result} ->
+                            Result
+                        after T ->
+                          {error, timeout}
+                        end;
+                      Nowait ->
+                        Nowait
+                  end,
+    lager:info("player ~p plays match ~p with move ~p resulting {~p, ~p}", [Player, Match, Move, Code, Msg]),
     {ok, Req3} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
                                       {retry, _} -> 202;
@@ -45,13 +66,13 @@ do_match({<<"POST">>, Req}, State) ->
 do_match({<<"GET">>, Req}, State) ->
     {Id, Req1} = cowboy_req:binding(id, Req),
     {Rsc, Req2} = cowboy_req:binding(rsc, Req1),
-    {Param, Req3} = cowboy_req:qs_val(<<"player">>, Req2),
-    lager:debug("get match ~p, rsc ~p, param ~p", [Id, Rsc, Param]),
+    {Player, Req3} = cowboy_req:qs_val(<<"player">>, Req2),
     {Code, Msg} = case Rsc of
                       undefined -> rsp_match:get(Id);
-                      <<"hint">> -> rsp_match:hint(Id, Param);
+                      <<"hint">> -> rsp_match:hint(Id, Player);
                       _ -> {error, bad_resource}
                   end,
+    lager:info("get match ~p as ~p for player ~p resulting {~p, ~p}", [Id, Rsc, Player, Code, Msg]),
     {ok, Req4} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
                                       {error, bad_resource} -> 400;

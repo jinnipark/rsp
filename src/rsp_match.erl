@@ -57,17 +57,7 @@ stop(_) ->
 play(_, {_, Move}) when (Move =/= <<"rock">>) and (Move =/= <<"scissors">>) and (Move =/= <<"paper">>) ->
     {error, illegal};
 play(Pid, {Player, Move}) when is_pid(Pid) ->
-    case gen_server:call(Pid, {play, Player, erlang:binary_to_atom(Move, latin1)}) of
-		{wait, T} ->
-			receive
-				{Pid, Result} ->
-					Result
-			after T ->
-				{error, timeout}
-			end;
-        Result ->
-            Result
-	end;
+    gen_server:call(Pid, {play, Player, erlang:binary_to_atom(Move, latin1)});
 play(Id, {Player, Move}) when is_binary(Id) ->
 	invoke(fun play/2, [{Player, Move}], Id);
 play(_, _) ->
@@ -166,7 +156,7 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
             case Pid2 of
                 undefined ->
                     lager:debug("player1 ~p first move ~p", [Player, Move]),
-                    {reply, {wait, To*2}, State#?MODULE{timestamp=Now, player1={Player, L, Pid}}, To};
+                    {reply, {wait, self(), To*2}, State#?MODULE{timestamp=Now, player1={Player, L, Pid}}, To};
                 _ ->
                     lager:debug("player1 ~p last move ~p", [Player, Move]),
                     P2 = {Player2, L2, undefined},
@@ -199,7 +189,7 @@ handle_call({play, Player, Move}, {Pid, _}, State=#?MODULE{timeout=To}) ->
             case Pid1 of
                 undefined ->
                     lager:debug("player2 ~p first move ~p", [Player, Move]),
-                    {reply, {wait, To*2}, State#?MODULE{timestamp=Now, player2={Player, L, Pid}}, To};
+                    {reply, {wait, self(), To*2}, State#?MODULE{timestamp=Now, player2={Player, L, Pid}}, To};
                 _ ->
                     lager:debug("player2 ~p last move ~p", [Player, Move]),
                     P1 = {Player1, L1, undefined},

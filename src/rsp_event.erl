@@ -9,7 +9,7 @@
 -author("Sungjin Park <jinni.park@gmail.com>").
 -behavior(gen_server).
 
--export([start/1, start_link/1, stop/1, join/2, get/1]).
+-export([start/1, start_link/1, stop/1, join/2, leave/2, get/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -include("props_to_record.hrl").
@@ -76,21 +76,18 @@ get(Id) ->
 %%
 -spec join(pid() | binary(), binary()) -> {ok, binary()} | {error, term()}.
 join(Pid, Player) when erlang:is_pid(Pid) ->
-    case gen_server:call(Pid, {join, Player}) of
-        {wait, T} ->
-            receive
-                {Pid, Result} ->
-                    Result
-            after T ->
-                {error, timeout}
-            end;
-        Result ->
-            Result
-    end;
+    gen_server:call(Pid, {join, Player});
 join(Id, Player) when erlang:is_binary(Id) ->
     invoke(fun join/2, [Player], Id);
 join(_, _) ->
     {error, not_supported}.
+
+%%
+%% Leave an event
+%%
+-spec leave(pid(), binary()) -> ok.
+leave(Pid, Player) ->
+    gen_server:cast(Pid, {leave, Player}).
 
 %%
 %% gen_server callbacks
@@ -116,7 +113,7 @@ handle_call({join, Player}, {Pid, _}, State=#?MODULE{id=Id, pool=Pool, timeout=T
             case Pool of
                 [] ->
                     erlang:link(Pid),
-                    {reply, {wait, T}, State#?MODULE{pool=[{Player, Pid}]}};
+                    {reply, {wait, self(), T}, State#?MODULE{pool=[{Player, Pid}]}};
                 [{Player1, Pid1} | Rest] ->
                     MatchId = base32:encode(uuid:get_v4(), [lower, nopad]),
                     case catch rsp_match:start([{id, MatchId}, {player1, Player1}, {player2, Player}, {event, Id}]) of
@@ -136,6 +133,16 @@ handle_call(Req, _From, State) ->
     lager:warning("unknown call ~p", [Req]),
     {noreply, State}.
 
+handle_cast({leave, Player}, State=#?MODULE{pool=Pool}) ->
+    case lists:keytake(Player, 1, Pool) of
+        {value, {Player, Pid}, Rest} ->
+            lager:debug("player ~p left from ~p", [Player, Pid]),
+            erlang:unlink(Pid),
+            {noreply, State#?MODULE{pool=Rest}};
+        _ ->
+            lager:warning("player ~p left from nowhere", [Player]),
+            {noreply, State}
+    end;
 handle_cast(stop, State) ->
     {stop, normal, State};
 handle_cast(Msg, State) ->

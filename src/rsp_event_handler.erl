@@ -12,8 +12,7 @@
 
 -include("rsp.hrl").
 
-init(Transport, Req, []) ->
-    lager:debug("init ~p", [Transport]),
+init(_Transport, Req, []) ->
     {ok, Req, undefined}.
 
 handle(Req, State) ->
@@ -21,9 +20,32 @@ handle(Req, State) ->
 
 do_event({<<"POST">>, Req}, State) ->
     {ok, Params, Req1} = cowboy_req:body_qs(Req),
+    Player = proplists:get_value(<<"player">>, Params),
     {Event, Req2} = cowboy_req:binding(id, Req1),
-    lager:debug("event ~p, params ~p", [Event, Params]),
-    {Code, Msg} = rsp_event:join(Event, proplists:get_value(<<"player">>, Params)),
+    lager:debug("player ~p joining event ~p", [Player, Event]),
+    {Code, Msg} = case rsp_event:join(Event, Player) of
+                    {wait, Pid, T} ->
+                      Transport = cowboy_req:get(transport, Req2),
+                      Socket = cowboy_req:get(socket, Req2),
+                      Transport:setopts(Socket, [{active, once}]),
+                      receive
+                          {tcp_closed, Socket} ->
+                            lager:debug("player ~p disconnected", [Player]),
+                            rsp_event:leave(Pid, Player),
+                            {error, retry};
+                          {ssl_closed, Socket} ->
+                            lager:debug("player ~p disconnected", [Player]),
+                            rsp_event:leave(Pid, Player),
+                            {error, retry};
+                          {Pid, Result} ->
+                              Result
+                      after T ->
+                          {error, timeout}
+                      end;
+                    Result ->
+                      Result
+                  end,
+    lager:info("player ~p joins event ~p resulting {~p, ~p}", [Player, Event, Code, Msg]),
     {ok, Req3} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
                                       {error, not_found} -> 404;
@@ -44,8 +66,8 @@ do_event({<<"GET">>, Req}, State) ->
              <<"all">> -> all;
              _ -> Val
          end,
-    lager:debug("get event ~p", [Id]),
     {Code, Msg} = rsp_event:get(Id),
+    lager:info("get event ~p resulting {~p, ~p}", [Id, Code, Msg]),
     {ok, Req2} = cowboy_req:reply(case {Code, Msg} of
                                       {ok, _} -> 200;
                                       {error, not_found} -> 404;
@@ -89,7 +111,7 @@ do_event({<<"GET">>, Req}, State) ->
                                   end, Req1),
     {ok, Req2, State};
 do_event({Method, Req}, State) ->
-    lager:warning("method not allowed ~p", [Method]),
+    lager:warning("method ~p not allowed", [Method]),
     {ok, Req1} = cowboy_req:reply(405, [], <<>>, Req),
     {ok, Req1, State}.
 
