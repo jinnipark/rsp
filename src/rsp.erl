@@ -8,7 +8,7 @@
 -module(rsp).
 -author("Sungjin Park <jinni.park@gmail.com>").
 
--export([start/0, stop/0, state/0, settings/1, is_alive/1]).
+-export([start/0, stop/0, state/0, settings/1, settings/2, is_alive/1]).
 
 -define(MNESIA_TIMEOUT, 10000).
 
@@ -57,6 +57,15 @@ settings(Module) ->
 		_ -> []
 	end.
 
+-spec settings(module(), {atom(), term()} | [{atom(), term()}]) -> ok.
+settings(Module, {Key, Value}) ->
+	Settings = settings(Module),
+	NewSettings = update({Key, Value}, Settings),
+	application:set_env(?MODULE, Module, NewSettings);
+settings(Module, Settings) ->
+	lists:foreach(fun(Setting) -> settings(Module, Setting) end, Settings).
+
+-spec is_alive(pid()) -> boolean().
 is_alive(Pid) ->
     Local = node(),
     case erlang:node(Pid) of
@@ -153,3 +162,10 @@ poststop(mnesia) ->
 				  nodes());
 poststop(_) ->
 	ok.
+
+update({Key, Value}, []) ->
+	[{Key, Value}];
+update({Key, Value}, [{Key, _} | Rest]) ->
+	[{Key, Value} | Rest];
+update({Key, Value}, [H | Rest]) ->
+	[H | update({Key, Value}, Rest)].

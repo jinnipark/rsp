@@ -108,7 +108,6 @@ init(State=#?MODULE{id=Id, name=Name}) ->
             mnesia:write(#rsp_event_tb{id=Id, name=Name, ref=self(), from=From})
         end,
     {atomic, ok} = mnesia:transaction(F),
-    erlang:process_flag(trap_exit, true),
     {ok, State}.
 
 handle_call({join, Player}, {Pid, _}, State=#?MODULE{id=Id, pool=Pool, timeout=T}) ->
