@@ -8,7 +8,7 @@
 -module(rsp).
 -author("Sungjin Park <jinni.park@gmail.com>").
 
--export([start/0, stop/0, state/0, settings/1]).
+-export([start/0, stop/0, state/0, settings/1, is_alive/1]).
 
 -define(MNESIA_TIMEOUT, 10000).
 
@@ -56,6 +56,15 @@ settings(Module) ->
 		{ok, Props} -> Props;
 		_ -> []
 	end.
+
+is_alive(Pid) ->
+    Local = node(),
+    case erlang:node(Pid) of
+        Local ->
+            erlang:is_process_alive(Pid);
+        Remote ->
+            rpc:call(Remote, erlang, is_process_alive, [Pid])
+    end.
 
 %%
 %% Local functions

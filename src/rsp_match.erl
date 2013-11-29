@@ -292,7 +292,7 @@ invoke(F, Args, Id) ->
 		{atomic, [Match]} ->
 			case Match#rsp_match_tb.ref of
 				Pid when erlang:is_pid(Pid) ->
-					case catch erlang:is_process_alive(Pid) of
+					case rsp:is_alive(Pid) of
 						true ->
 							erlang:apply(F, [Pid | Args]);
 						_ -> % Dead match, abandon.

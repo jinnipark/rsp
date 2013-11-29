@@ -187,7 +187,7 @@ invoke(F, Args, Id) ->
         {atomic, [Event]} ->
             case Event#rsp_event_tb.ref of
                 Ref when erlang:is_pid(Ref) ->
-                    Pid = case catch erlang:is_process_alive(Ref) of
+                    Pid = case catch rsp:is_alive(Ref) of
                               true ->
                                   Ref;
                               _ -> % Dead event, restart in a lazy manner.
@@ -205,4 +205,3 @@ invoke(F, Args, Id) ->
         {aborted, Reason} ->
             {error, Reason}
     end.
-
