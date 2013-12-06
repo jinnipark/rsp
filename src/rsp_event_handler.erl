@@ -30,15 +30,15 @@ do_event({<<"POST">>, Req}, State) ->
                       Transport:setopts(Socket, [{active, once}]),
                       receive
                         {Pid, Result} ->
-                          catch Transport:setopts(Socket, [{active, none}]),
+                          catch Transport:setopts(Socket, [{active, false}]),
                           Result;
                         _ -> % All the other messages - including tcp_closed considered illegal
                           lager:debug("player ~p left", [Player]),
                           rsp_event:leave(Pid, Player),
-                          catch Transport:setopts(Socket, [{active, none}]),
+                          catch Transport:setopts(Socket, [{active, false}]),
                           {error, retry}
                       after T ->
-                          catch Transport:setopts(Socket, [{active, none}]),
+                          catch Transport:setopts(Socket, [{active, false}]),
                           {error, timeout}
                       end;
                     Result ->
