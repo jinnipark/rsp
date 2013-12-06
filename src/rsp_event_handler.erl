@@ -29,17 +29,16 @@ do_event({<<"POST">>, Req}, State) ->
                       Socket = cowboy_req:get(socket, Req2),
                       Transport:setopts(Socket, [{active, once}]),
                       receive
-                          {tcp_closed, Socket} ->
-                            lager:debug("player ~p disconnected", [Player]),
-                            rsp_event:leave(Pid, Player),
-                            {error, retry};
-                          {ssl_closed, Socket} ->
-                            lager:debug("player ~p disconnected", [Player]),
-                            rsp_event:leave(Pid, Player),
-                            {error, retry};
-                          {Pid, Result} ->
-                              Result
+                        {Pid, Result} ->
+                          catch Transport:setopts(Socket, [{active, none}]),
+                          Result;
+                        _ -> % All the other messages - including tcp_closed considered illegal
+                          lager:debug("player ~p left", [Player]),
+                          rsp_event:leave(Pid, Player),
+                          catch Transport:setopts(Socket, [{active, none}]),
+                          {error, retry}
                       after T ->
+                          catch Transport:setopts(Socket, [{active, none}]),
                           {error, timeout}
                       end;
                     Result ->
